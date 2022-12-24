@@ -2,17 +2,27 @@ from bs4 import BeautifulSoup
 import requests
 
 
+"""
+ДЗ №2. Визуализатор зависимостей пакета
+Написать на выбранном вами языке программирования программу,
+которая принимает в качестве аргумента командной строки имя пакета,
+а возвращает граф его зависимостей в виде текста на языке Graphviz.
+На выбор: для npm или для pip. Пользоваться самими этими менеджерами пакетов запрещено.
+Главное, чтобы программа работала даже с неустановленными пакетами и без использования pip/npm.
+"""
+
+
 def get_file_dependencies_part1(name_package):
-    """Ворзвращает ссылку на github этого пакета"""
 
     PIP_URL = "https://pypi.org/project/"
 
     page = requests.get(PIP_URL + name_package) # Получаем html страницы указанного пакета
     if page.status_code != 200: # Если ошибка в запросе, то возвращаем None
+        #print ("Пакет не существует")
         return None
     text = page.text
     soup = BeautifulSoup(text, "html.parser")
-    links_html = soup.find_all('a')
+    links_html = soup.find_all('a') #найти все элементы a (ссылки HTML) в разобранной HTML-странице
 
     for link_html in links_html: # Ищем ссылку на github указанного пакета
         if link_html.get('href') is not None \
@@ -29,11 +39,12 @@ def get_file_dependencies_part2(link): #Функция, возвращающая
 
     page = requests.get(link) # Получаем html страницы указанной ссылки
     if page.status_code != 200:# Если ошибка в запросе, то возвращаем None
+        #print("Пакет не существует")
         return None
     text = page.text
     soup = BeautifulSoup(text, "html.parser")
     links_html = soup.find_all('a')
-    array = []
+    array = [] #Хранит ссылки на файлы setup.py или setup.org
 
     # Ищем ссылки на файлы setup.py или setup.cfg
     for link_html in links_html:
@@ -63,23 +74,23 @@ def get_file_dependencies(name_package):
 
 def get_name_packages(page_url):
     """Возвращает названия зависимых пакетов"""
-    page = requests.get(page_url)
+    page = requests.get(page_url) # Получаем html страницы указанной ссылки
     if page.status_code != 200:
         return None
     text = page.text
     soup = BeautifulSoup(text, "html.parser")
 
-    name_packages = set()
+    name_packages = set() # Хранит имена всех пакетов
 
-    flag = False
-    body_fail = soup.find_all('tr')
+    flag = False # Флаг для отслеживания, находимся ли мы в блоке зависимостей
+    body_fail = soup.find_all('tr')# Находим все элементы 'tr' в HTML
     for line in body_fail:
         if "]" in line.text or line.text is None:
-            flag = False
-        if flag:
-            count = 0
+            flag = False # Если мы достигаем конца блока зависимостей, устанавливаем флаг в False
+        if flag: # Если мы находимся в блоке зависимостей
+            count = 0 # Счетчик количества ведущих пробелов в строке
             for el in line.text:
-                if el == " " or el == "\n":
+                if el == " " or el == "\n": # Увеличиваем счетчик для каждого ведущего пробела или переноса
                     count += 1
                 else:
                     break
@@ -101,21 +112,26 @@ def get_name_packages(page_url):
     return name_packages
 
 
-def work(package, tab):
-    urls = get_file_dependencies(package)
-    if urls is not None:
+
+def start(package, tab, output): #Функция вызывает себя рекурсивно, чтобы найти все зависимости пакета
+    urls = get_file_dependencies(package) # Получаем ссылки на файлы с зависимостями пакета
+    if urls is not None: # Для каждой ссылки
         for url in urls:
             if url is not None:
-                if get_name_packages(url) is not None:
+                if get_name_packages(url) is not None: # Получаем имена зависимостей из файла
                     for name in get_name_packages(url):
                         if name is None:
                             continue
-                        print("\t" * tab + package + " -> " + name)
-                        work(name, tab + 1)
+                        output += "\t" * tab + package + " -> " + name + ';\n'
+                        output = start(name, tab + 1, output)# Рекурсивно вызываем функцию для найденной зависимости
+    return output
 
 
-if __name__ == '__main__':
-    package = input("Введите название пакета для которого нужно вывести дерево зависимостей: ")
-    print("digraph " + package + "{")
-    work(package, 0)
-    print("}")
+package = input("Введите название пакета для которого нужно вывести дерево зависимостей: ")
+output = ("digraph " + package + "{\n")
+result = start(package, 0, '')
+if result == '':
+    print("Такой пакет не найден")
+else:
+    output += result +"}"
+    print (output)
